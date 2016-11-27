@@ -1,0 +1,110 @@
+In this folder, you can find a GPU program named "norm.cu". It is a
+program that makes some normalization to values in a matrix.
+
+In this project, you are asked to do the following:
+
+* Manually optimize the program to minimize the execution time on a
+  GTX 480 and a GTX 780 on the ARC cluster. You could use the same
+  optimized code for both hardware platforms or different codes for
+  different hardware platforms. You are required to make at least
+  three optimizations, which shall belong to two of the following
+  types:
+
+  1. Memory optimizations (e.g., memory coalescing, improve cache
+  performance, using better data placement on the memory systems)
+  
+  2. Minimize thread divergences (i.e., making threads in a warp take
+  the same control flow path in the kernel)
+  
+  3. Increase the amount of parallelism (e.g., adjusting the resource
+  usage of each thread to allow more threads to run concurrently on a
+  GPU Streaming Multiprocessor, tuning the dimensions of thread blocks
+  or grids)
+
+  4. Minimize the number of instructions/operations a thread needs to
+  do (e.g., loop unrolling)
+
+  Try to use the NVPP profiler and the GPU Optimization Advising Tool
+  to get guidance on optimizations of GPU program.
+  
+* What to submit
+  All should be put into a single tar or zip package. The report must
+  be in PDF format.
+  
+  * Code
+  
+  The original and all of your optimized versions. There should be a
+  folder for each hardware platform, in which, there should be at
+  least 4 versions of the code:
+
+    * opt1.cu, opt2.cu, opt3.cu: the program with only one optimization applied.
+
+    * optAll.cu: the program with all optimizations applied.
+    
+  You must include a README to list what each included file is. You
+  must also include a Makefile and the instructions on how to compile
+  and run the code. The code must be compilable and runnable on the
+  ARC cluster.
+
+  * A report
+  Write a report about the experiments. The report must include the
+  following four sections (clearly mark the titles of the sections):
+
+  1. Performance Issues:
+
+  The set of performance issues of the original program that you
+  find out. You should try to use NVPP to get the performance analysis
+  report. It should help you identify the performance problems. 
+  
+  2. Optimizations:
+
+  A clear description of the set of optimizations you have
+  experimented with, which of the four types do the optimizations
+  belong to. You should explain why you decide to try these
+  optimizations, what benefits you expected to see from these
+  optimizations, and the actual performance you observed.
+
+  3. Performance:
+
+  For each of the hardware platform, report the execution times of the
+  original GPU kernel and every version of the kernel that you have
+  optimized for that hardware.
+
+  4. Experience on Tool:
+
+  Your experience with the GPU Optimization Advising Tool (e.g.,
+  whether it is helpful; if so, what kind of help you get from it).
+
+* Grading Criteria
+
+  * Optimizations: 40points. Each correctly implemented optimization
+    (including the combined version) worths 10points. This part is
+    capped at 40points; more optimizations could get rewarded at the
+    following aspect.
+
+  * Competition: up to 20 bonus points. We will use the best version
+    of each student on GTX780 to do the ranking: 1st place gets 20
+    bonus points; 2nd place gets 15points; 3rd place gets 10points;
+    4th place gets 5points.
+
+  * Report: 40points. 10points for each of the 4 required sections.
+
+  * Others: 10points for README and Makefile.
+  
+* Notes
+
+  * There are 48 GTX480 machines, but only 5 GTX780 machines in ARC.
+    So please be considerate and try to minimize the amount of time of
+    occupying those GTX780 machines. Try to develop code on other
+    machines and only use those GTX780 machines to collect performance
+    data.
+
+  * Please refer to our HW3 for the links related with GPU
+    programming. 
+
+  * Please refer to the ARC cluster website on how to connect to a
+    machine with a specific type of GPU.
+    (e.g. qsub -q gtx480 ... # job submitted to GPU/CUDA queue
+    (GTX480))
+
+  
