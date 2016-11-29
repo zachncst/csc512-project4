@@ -49,36 +49,51 @@ void checkresult(float *ref, float *in, float *out, float *mul, int width) {
 	printf("results checking passed!\n");
 }
 
-__global__ void norm(float *in, float *out, float *mul, int width) {
+__global__ void normUnrolled(float *in, float *out, float *mul, int width) {
 	int tx = blockIdx.x * blockDim.x + threadIdx.x;
 	int ty = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (tx >= width || ty >= SIZE / width) return;
 	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
-	float sum = 0.0f;
 
-	for (int i = 0; i < BLOCK_SIZE; i++) {
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			sum += in[start + i * width + j] * mul[j];
+	tx = tx*width;
+	float mySum = 0.0f;
+	float addum = 0.0f;
+
+#pragma unroll
+	for (int j = 0; j < BLOCK_SIZE; j++) {
+		addum = 0.0f;
+
+		if (BLOCK_SIZE % 4 == 0) {
+			for (int i = 0; i < BLOCK_SIZE / 4; i++) {
+				addum += in[start + j + i * 4 + 0 * width]
+					+ in[start + j + i * 4 + 1 * width]
+					+ in[start + j + i * 4 + 2 * width]
+					+ in[start + j + i * 4 + 3 * width];
+			}
 		}
+		else {
+			for (int i = 0; i < BLOCK_SIZE; i++) {
+				addum += in[start + j + i * width];
+			}
+		}
+
+		mySum += mul[j] * addum;
 	}
 
-	printf("Sum %f\n", sum);
-
 	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx * width + ty] = 2.0 * in[tx * width + ty] / sum;
+		out[tx + ty] = 2.0 * in[tx + ty] / mySum;
 	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx * width + ty] = in[tx * width + ty] / sum;
+		out[tx + ty] = in[tx + ty] / mySum;
 	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / sum;
+		out[tx + ty] = (-1.0) * in[tx + ty] / mySum;
 	else
-		out[tx * width + ty] = 0.0f;
+		out[tx + ty] = 0.0f;
+
 }
 
+
 int main() {
-	//float *hA_in = (float *)malloc(SIZE * sizeof(float));
-	//float *hA_out = (float *)malloc(SIZE * sizeof(float));
-	//float *hB_in = (float *)malloc(BLOCK_SIZE * sizeof(float));
 	float *ref = (float *)malloc(SIZE * sizeof(float));
 	float *hA_in, *hA_out, *hB_in;
 	float *dA_in, *dA_out, *dB_in;
@@ -111,7 +126,7 @@ int main() {
 	cudaEventCreate(&stop);
 
 	cudaEventRecord(start, 0);
-	norm << <grid, block >> > (dA_in, dA_out, dB_in, BLOCK_SIZE * GRID_SIZE);
+	normUnrolled << <grid, block >> > (dA_in, dA_out, dB_in, BLOCK_SIZE * GRID_SIZE);
 
 	cudaDeviceSynchronize();
 	cudaEventRecord(stop, 0);
@@ -124,3 +139,4 @@ int main() {
 	cudaMemcpy(hA_out, dA_out, SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	checkresult(ref, hA_in, hA_out, hB_in, BLOCK_SIZE * GRID_SIZE);
 }
+

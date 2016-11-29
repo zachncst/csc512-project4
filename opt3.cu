@@ -57,22 +57,56 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
 	float sum = 0.0f;
 
-	for (int i = 0; i < BLOCK_SIZE; i++) {
+	__syncthreads();
+
+	// perform first level of reduction,
+	// reading from global memory, writing to shared memory
+	__shared__ float sdata[BLOCK_SIZE];
+	unsigned int tid = threadIdx.x;
+	//unsigned int i = blockIdx.x*(blockDim.x * 2) + threadIdx.x;
+	int i = threadIdx.x;
+
+	float mySum = 0;
+
+	if (i + BLOCK_SIZE < width)
 		for (int j = 0; j < BLOCK_SIZE; j++) {
-			sum += in[start + i * width + j] * mul[j];
+			mySum += in[start + j + i * width] * mul[j];
+		}
+
+	__syncthreads();
+
+	//printf("1 TID %d sum %f\n", i, mySum);
+
+	if (tid < 16) {
+		// Reduce final warp using shuffle
+		for (int offset = warpSize/4; offset > 0; offset /= 2)
+		{
+			mySum += __shfl_down(mySum, offset);
 		}
 	}
 
-	printf("Sum %f\n", sum);
+	//printf("2 TID %d sum %f\n", i, mySum);
+
+	// write result for this block to global mem
+	//if (tid == 0) g_odata[blockIdx.x] = mySum
+
+	__shared__ float total;
+
+	if (tid == 0) total = mySum;
+
+	__syncthreads();
+	
+	//if (tid == 0) printf("total is %f\n", total);
 
 	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx * width + ty] = 2.0 * in[tx * width + ty] / sum;
+		out[tx * width + ty] = 2.0 * in[tx * width + ty] / total;
 	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx * width + ty] = in[tx * width + ty] / sum;
+		out[tx * width + ty] = in[tx * width + ty] / total;
 	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / sum;
+		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / total;
 	else
-		out[tx * width + ty] = 0.0f;
+		out[tx * width + ty] = 0.0f;;
+
 }
 
 int main() {
@@ -123,4 +157,14 @@ int main() {
 	printf("kernel time %fs\n", milliseconds);
 	cudaMemcpy(hA_out, dA_out, SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	checkresult(ref, hA_in, hA_out, hB_in, BLOCK_SIZE * GRID_SIZE);
+
+	/*printf("\n");
+
+	for (int i = 0; i < SIZE; i++) {
+	printf("%d ", hA_out[i]);
+
+	if (i % 16 == 0) {
+	printf("\n");
+	}
+	}*/
 }

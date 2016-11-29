@@ -49,30 +49,46 @@ void checkresult(float *ref, float *in, float *out, float *mul, int width) {
 	printf("results checking passed!\n");
 }
 
-__global__ void norm(float *in, float *out, float *mul, int width) {
+__global__ void normWithSharedMemory(float *in, float *out, float *mul, int width) {
 	int tx = blockIdx.x * blockDim.x + threadIdx.x;
 	int ty = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (tx >= width || ty >= SIZE / width) return;
 	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
-	float sum = 0.0f;
+
+	float mySum = 0.0f;
+
+	__shared__ float inData[BLOCK_SIZE][BLOCK_SIZE];
+	__shared__ float mulData[BLOCK_SIZE];
+
+	//printf("index_in %d threadX %d threadY %d \n", start, threadIdx.x, threadIdx.y);
+
+	int i = threadIdx.x;
+	mulData[i] = mul[i];
+
+	__syncthreads();
+
+	for (int j = 0; j < BLOCK_SIZE; j++) {
+		inData[i][j] = in[start + i*width + j] * mulData[j];
+	}
+
+	__syncthreads();
 
 	for (int i = 0; i < BLOCK_SIZE; i++) {
 		for (int j = 0; j < BLOCK_SIZE; j++) {
-			sum += in[start + i * width + j] * mul[j];
+			mySum += inData[i][j];
 		}
 	}
 
-	printf("Sum %f\n", sum);
-
 	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx * width + ty] = 2.0 * in[tx * width + ty] / sum;
+		out[tx * width + ty] = 2.0 * in[tx * width + ty] / mySum;
 	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx * width + ty] = in[tx * width + ty] / sum;
+		out[tx * width + ty] = in[tx * width + ty] / mySum;
 	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / sum;
+		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / mySum;
 	else
 		out[tx * width + ty] = 0.0f;
+
 }
 
 int main() {
@@ -111,7 +127,7 @@ int main() {
 	cudaEventCreate(&stop);
 
 	cudaEventRecord(start, 0);
-	norm << <grid, block >> > (dA_in, dA_out, dB_in, BLOCK_SIZE * GRID_SIZE);
+	normWithSharedMemory << <grid, block >> > (dA_in, dA_out, dB_in, BLOCK_SIZE * GRID_SIZE);
 
 	cudaDeviceSynchronize();
 	cudaEventRecord(stop, 0);
@@ -123,4 +139,14 @@ int main() {
 	printf("kernel time %fs\n", milliseconds);
 	cudaMemcpy(hA_out, dA_out, SIZE * sizeof(float), cudaMemcpyDeviceToHost);
 	checkresult(ref, hA_in, hA_out, hB_in, BLOCK_SIZE * GRID_SIZE);
+
+	/*printf("\n");
+
+	for (int i = 0; i < SIZE; i++) {
+	printf("%d ", hA_out[i]);
+
+	if (i % 16 == 0) {
+	printf("\n");
+	}
+	}*/
 }
