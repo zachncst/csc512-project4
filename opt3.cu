@@ -49,7 +49,7 @@ void checkresult(float *ref, float *in, float *out, float *mul, int width) {
 	printf("results checking passed!\n");
 }
 
-__global__ void norm(float *in, float *out, float *mul, int width) {
+__global__ void normWithShflDown(float *in, float *out, float *mul, int width) {
 	int tx = blockIdx.x * blockDim.x + threadIdx.x;
 	int ty = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -62,9 +62,12 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 	// perform first level of reduction,
 	// reading from global memory, writing to shared memory
 	__shared__ float sdata[BLOCK_SIZE];
+
 	unsigned int tid = threadIdx.x;
 	//unsigned int i = blockIdx.x*(blockDim.x * 2) + threadIdx.x;
 	int i = threadIdx.x;
+	
+	__syncthreads();
 
 	float mySum = 0;
 
@@ -105,7 +108,7 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 	else if (tx % 2 == 1 && ty % 2 == 1)
 		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / total;
 	else
-		out[tx * width + ty] = 0.0f;;
+		out[tx * width + ty] = 0.0f;
 
 }
 
@@ -145,7 +148,7 @@ int main() {
 	cudaEventCreate(&stop);
 
 	cudaEventRecord(start, 0);
-	norm << <grid, block >> > (dA_in, dA_out, dB_in, BLOCK_SIZE * GRID_SIZE);
+	normWithShflDown << <grid, block >> > (dA_in, dA_out, dB_in, BLOCK_SIZE * GRID_SIZE);
 
 	cudaDeviceSynchronize();
 	cudaEventRecord(stop, 0);

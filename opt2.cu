@@ -58,7 +58,7 @@ __global__ void normWithSharedMemory(float *in, float *out, float *mul, int widt
 
 	float mySum = 0.0f;
 
-	__shared__ float inData[BLOCK_SIZE][BLOCK_SIZE];
+	__shared__ float inData[BLOCK_SIZE];
 	__shared__ float mulData[BLOCK_SIZE];
 
 	//printf("index_in %d threadX %d threadY %d \n", start, threadIdx.x, threadIdx.y);
@@ -69,23 +69,28 @@ __global__ void normWithSharedMemory(float *in, float *out, float *mul, int widt
 	__syncthreads();
 
 	for (int j = 0; j < BLOCK_SIZE; j++) {
-		inData[i][j] = in[start + i*width + j] * mulData[j];
+		mySum += in[start + i*width + j] * mulData[j];
 	}
+
+	inData[i] = mySum;
+	//printf("total %f\n", mySum);
 
 	__syncthreads();
 
-	for (int i = 0; i < BLOCK_SIZE; i++) {
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			mySum += inData[i][j];
-		}
+	float total = 0.0f;  
+	
+	for (int j = 0; j < BLOCK_SIZE; j++) { 
+		total += inData[j]; 
 	}
+	
+	__syncthreads();
 
 	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx * width + ty] = 2.0 * in[tx * width + ty] / mySum;
+		out[tx * width + ty] = 2.0 * in[tx * width + ty] / total;
 	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx * width + ty] = in[tx * width + ty] / mySum;
+		out[tx * width + ty] = in[tx * width + ty] / total;
 	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / mySum;
+		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / total;
 	else
 		out[tx * width + ty] = 0.0f;
 

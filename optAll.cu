@@ -49,33 +49,6 @@ void checkresult(float *ref, float *in, float *out, float *mul, int width) {
 	printf("results checking passed!\n");
 }
 
-__inline__ __device__
-int warpReduceSum(int val) {
-	for (int offset = warpSize / 2; offset > 0; offset /= 2)
-		val += __shfl_down(val, offset);
-	return val;
-}
-
-__inline__ __device__
-int blockReduceSum(int val) {
-
-	static __shared__ int shared[32]; // Shared mem for 32 partial sums
-	int lane = threadIdx.x % warpSize;
-	int wid = threadIdx.x / warpSize;
-
-	val = warpReduceSum(val);     // Each warp performs partial reduction
-
-	if (lane == 0) shared[wid] = val; // Write reduced value to shared memory
-
-	__syncthreads();              // Wait for all partial reductions
-
-								  //read from shared memory only if that warp existed
-	val = (threadIdx.x < blockDim.x / warpSize) ? shared[lane] : 0;
-
-	if (wid == 0) val = warpReduceSum(val); //Final reduce within first warp
-
-	return val;
-}
 
 __global__ void norm(float *in, float *out, float *mul, int width) {
 	int tx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -83,147 +56,66 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 
 	if (tx >= width || ty >= SIZE / width) return;
 	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
+	float sum = 0.0f;
 
-	__shared__ float inData[BLOCK_SIZE][BLOCK_SIZE];
-	__shared__ float sum[BLOCK_SIZE];
+	__syncthreads();
+
+	// perform first level of reduction,
+	// reading from global memory, writing to shared memory
+	__shared__ float preData[BLOCK_SIZE][BLOCK_SIZE];
+	__shared__ float sdata[BLOCK_SIZE];
 	__shared__ float mulData[BLOCK_SIZE];
 
-	//printf("index_in %d threadX %d threadY %d \n", start, threadIdx.x, threadIdx.y);
-
-	int tid = threadIdx.x;
-	mulData[tid] = mul[tid];
-	sum[tid] = 0.0f;
-	
-	__syncthreads();
-
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		inData[tid][j] = in[start + tid*width + j] * mulData[j]; 
-	}
-
-	__syncthreads();
-
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		sum[tid] += inData[tid][j]; 
-		//atomicAdd(sum[tid], sum[tid]+inData[tid][j]);
-	}
-
-
-	__syncthreads();
-
-	float sumTemp = 0.0f;
-	for (int i = 0; i < BLOCK_SIZE; i++) {
-		for (int j = 0; j < BLOCK_SIZE; j++) {
-			sumTemp += inData[i][j];
-		}
-	}
-
-	printf("sum %f sumTemp %f\n", sum[tid], sumTemp);
-
-	float mySum = 0.0f;
-
-	for (int j = 0; j < BLOCK_SIZE/2; j++) {
-		mySum += sum[j];
-	}
-
-	printf("mySum %f sumTemp %f\n", mySum, sumTemp);
-
-	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx * width + ty] = 2.0 * in[tx * width + ty] / mySum;
-	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx * width + ty] = in[tx * width + ty] / mySum;
-	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / mySum;
-	else
-		out[tx * width + ty] = 0.0f;
-
-}
-
-__global__ void normWithSharedMemory(float *in, float *out, float *mul, int width) {
-	int tx = blockIdx.x * blockDim.x + threadIdx.x;
-	int ty = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if (tx >= width || ty >= SIZE / width) return;
-	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
-
-	float mySum = 0.0f;
-
-	__shared__ float inData[BLOCK_SIZE][BLOCK_SIZE];
-	__shared__ float mulData[BLOCK_SIZE];
-
-	//printf("index_in %d threadX %d threadY %d \n", start, threadIdx.x, threadIdx.y);
-
+	unsigned int tid = threadIdx.x;
+	//unsigned int i = blockIdx.x*(blockDim.x * 2) + threadIdx.x;
 	int i = threadIdx.x;
 	mulData[i] = mul[i];
-	
-	__syncthreads();
-
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		inData[i][j] = in[start + i*width + j] * mulData[j]; 
-	}
 
 	__syncthreads();
 
-	for (int i = 0; i < BLOCK_SIZE; i++) {
+	float mySum = 0;
+
+	if (i + BLOCK_SIZE < width)
 		for (int j = 0; j < BLOCK_SIZE; j++) {
-			mySum += inData[i][j];
+			mySum += in[start + i + j * width];
+		}
+
+	mySum *= mulData[i];
+
+	__syncthreads();
+
+	//printf("1 TID %d sum %f\n", i, mySum);
+
+	if (tid < 16) {
+		// Reduce final warp using shuffle
+		for (int offset = warpSize / 4; offset > 0; offset /= 2)
+		{
+			mySum += __shfl_down(mySum, offset);
 		}
 	}
 
+	//printf("2 TID %d sum %f\n", i, mySum);
+
+	// write result for this block to global mem
+	//if (tid == 0) g_odata[blockIdx.x] = mySum
+
+	__shared__ float total;
+
+	if (tid == 0) total = mySum;
+
+	__syncthreads();
+
+	//if (tid == 0) printf("total is %f\n", total);
+
 	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx * width + ty] = 2.0 * in[tx * width + ty] / mySum;
+		out[tx * width + ty] = 2.0 * in[tx * width + ty] / total;
 	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx * width + ty] = in[tx * width + ty] / mySum;
+		out[tx * width + ty] = in[tx * width + ty] / total;
 	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / mySum;
+		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / total;
 	else
 		out[tx * width + ty] = 0.0f;
-
 }
-
-
-__global__ void normUnrolled(float *in, float *out, float *mul, int width) {
-	int tx = blockIdx.x * blockDim.x + threadIdx.x;
-	int ty = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if (tx >= width || ty >= SIZE / width) return;
-	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
-
-	tx = tx*width;
-	float mySum = 0.0f;
-	float addum = 0.0f;
-
-#pragma unroll
-	for (int j = 0; j < BLOCK_SIZE; j++) {
-		addum = 0.0f;
-
-		if (BLOCK_SIZE % 4 == 0) {
-			for (int i = 0; i < BLOCK_SIZE / 4; i++) {
-				addum += in[start + j + i * 4 + 0 * width]
-					+ in[start + j + i * 4 + 1 * width]
-					+ in[start + j + i * 4 + 2 * width]
-					+ in[start + j + i * 4 + 3 * width];
-			}
-		}
-		else {
-			for (int i = 0; i < BLOCK_SIZE; i++) {
-				addum += in[start + j + i * width];
-			}
-		}
-
-		mySum += mul[j] * addum;
-	}
-
-	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx + ty] = 2.0 * in[tx + ty] / mySum;
-	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx + ty] = in[tx + ty] / mySum;
-	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx + ty] = (-1.0) * in[tx + ty] / mySum;
-	else
-		out[tx + ty] = 0.0f;
-
-}
-
 
 int main() {
 	//float *hA_in = (float *)malloc(SIZE * sizeof(float));
