@@ -86,6 +86,7 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 
 	//printf("1 TID %d sum %f\n", i, mySum);
 
+#if (__CUDA_ARCH__ >= 300 )
 	if (tid < 16) {
 		// Reduce final warp using shuffle
 		for (int offset = warpSize / 4; offset > 0; offset /= 2)
@@ -93,6 +94,28 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 			mySum += __shfl_down(mySum, offset);
 		}
 	}
+#else
+	if ((BLOCK_SIZE >= 8) && (tid <  4))
+	{
+		sdata[tid] = mySum = mySum + sdata[tid + 4];
+	}
+
+	__syncthreads();
+
+	if ((BLOCK_SIZE >= 4) && (tid <  2))
+	{
+		sdata[tid] = mySum = mySum + sdata[tid + 2];
+	}
+
+	__syncthreads();
+
+	if ((BLOCK_SIZE  >= 2) && (tid <  1))
+	{
+		sdata[tid] = mySum = mySum + sdata[tid + 1];
+	}
+
+	__syncthreads();
+#endif
 
 	//printf("2 TID %d sum %f\n", i, mySum);
 

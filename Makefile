@@ -1,7 +1,8 @@
 PROGS= norm opt1 opt2 op3 optAll
 SM=
 INCLUDES=
-OPTS=-arch=compute_30 -code="sm_30,compute_30" 
+OPTS=
+#OPTS=-arch=compute_30 -code="sm_30,compute_30" 
 
 all: norm opt1 opt2 opt3 optAll
 
