@@ -62,19 +62,9 @@ __global__ void normUnrolled(float *in, float *out, float *mul, int width) {
 #pragma unroll
 	for (int j = 0; j < BLOCK_SIZE; j++) {
 		addum = 0.0f;
-
-		if (BLOCK_SIZE % 4 == 0) {
-			for (int i = 0; i < BLOCK_SIZE / 4; i++) {
-				addum += in[start + j + i * 4 + 0 * width]
-					+ in[start + j + i * 4 + 1 * width]
-					+ in[start + j + i * 4 + 2 * width]
-					+ in[start + j + i * 4 + 3 * width];
-			}
-		}
-		else {
-			for (int i = 0; i < BLOCK_SIZE; i++) {
-				addum += in[start + j + i * width];
-			}
+ 
+		for (int i = 0; i < BLOCK_SIZE; i++) { 
+			addum += in[start + j + i * width]; 
 		}
 
 		mySum += mul[j] * addum;
