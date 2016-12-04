@@ -1,9 +1,24 @@
-PROGS= norm
+PROGS= norm opt1 opt2 op3 optAll
 SM=
-LD_LIBRARY_PATH=C:\Program Files (x86)\Windows Kits\10\Include\10.0.10240.0\ucrt
+INCLUDES=
+OPTS=-arch=compute_30 -code="sm_30,compute_30" 
+
+all: norm opt1 opt2 opt3 optAll
 
 norm: norm.cu
-	nvcc -o $@ $^ $(SM)
+	nvcc $(OPTS) $(INCLUDES) -o $@ $^ $(SM)
+
+opt1: opt1.cu
+	nvcc $(OPTS) $(INCLUDES) -o $@ $^ $(SM)
+
+opt2: opt2.cu
+	nvcc $(OPTS) $(INCLUDES) -o $@ $^ $(SM)
+
+opt3: opt3.cu
+	nvcc $(OPTS) $(INCLUDES) -o $@ $^ $(SM)
+
+optAll: optAll.cu
+	nvcc $(OPTS) $(INCLUDES) -o $@ $^ $(SM)
 
 clean:
 	rm $(PROGS)

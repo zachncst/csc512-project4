@@ -63,8 +63,6 @@ __global__ void norm(float *in, float *out, float *mul, int width) {
 		}
 	}
 
-	printf("Sum %f\n", sum);
-
 	if (tx % 2 == 0 && ty % 2 == 0)
 		out[tx * width + ty] = 2.0 * in[tx * width + ty] / sum;
 	else if (tx % 2 == 1 && ty % 2 == 0)
