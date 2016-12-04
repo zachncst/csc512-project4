@@ -56,7 +56,6 @@ __global__ void normUnrolled(float *in, float *out, float *mul, int width) {
 	if (tx >= width || ty >= SIZE / width) return;
 	int start = blockIdx.x * blockDim.x * width + blockIdx.y * blockDim.y;
 
-	tx = tx*width;
 	float mySum = 0.0f;
 	float addum = 0.0f;
 
@@ -82,14 +81,13 @@ __global__ void normUnrolled(float *in, float *out, float *mul, int width) {
 	}
 
 	if (tx % 2 == 0 && ty % 2 == 0)
-		out[tx + ty] = 2.0 * in[tx + ty] / mySum;
+		out[tx * width + ty] = 2.0 * in[tx * width + ty] / mySum;
 	else if (tx % 2 == 1 && ty % 2 == 0)
-		out[tx + ty] = in[tx + ty] / mySum;
+		out[tx * width + ty] = in[tx * width + ty] / mySum;
 	else if (tx % 2 == 1 && ty % 2 == 1)
-		out[tx + ty] = (-1.0) * in[tx + ty] / mySum;
+		out[tx * width + ty] = (-1.0) * in[tx * width + ty] / mySum;
 	else
-		out[tx + ty] = 0.0f;
-
+		out[tx * width + ty] = 0.0f;
 }
 
 
